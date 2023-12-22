@@ -1,11 +1,17 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
+	"os"
 
+	"connectrpc.com/vanguard/vanguardgrpc"
 	"github.com/lopezator/filterer/internal/filterer"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 )
 
@@ -55,6 +61,30 @@ func (s *Server) Serve() error {
 	if err != nil {
 		return fmt.Errorf("server: failed to listen: %w", err)
 	}
+
+	handler, err := vanguardgrpc.NewTranscoder(srv)
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	listener2, err := net.Listen("tcp", "127.0.0.1:18181")
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	go func() {
+		// We use the h2c package in order to support HTTP/2 without TLS,
+		// so we can handle gRPC requests, which requires HTTP/2, in
+		// addition to Connect and gRPC-Web (which work with HTTP 1.1).
+		err = http.Serve(listener2, h2c.NewHandler(handler, &http2.Server{}))
+		if !errors.Is(err, http.ErrServerClosed) {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}()
+
 	log.Printf("server: server listening at %v", listener.Addr())
 	if err := srv.Serve(listener); err != nil {
 		return fmt.Errorf("server: failed to serve: %w", err)
