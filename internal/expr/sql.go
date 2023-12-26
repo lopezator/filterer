@@ -1,11 +1,10 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/saltosystems/x/errors"
 )
 
 // SQL returns a database friendly format composed by a string clause and a

@@ -2,7 +2,6 @@ package filterer
 
 import (
 	"flag"
-	"log"
 
 	"github.com/glerchundi/subcommands"
 	"github.com/lopezator/filterer/internal/server"
@@ -26,7 +25,6 @@ func newServeCommand() *subcommands.Command {
 		if err != nil {
 			return err
 		}
-		log.Println("filterer server started", "grpc-addr", cfg.GRPCAddr)
 		return srv.Serve()
 	})
 }

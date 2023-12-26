@@ -1,7 +1,4 @@
-FROM golang:1.21.4-bookworm
-
-# Set my module as private.
-ENV GOPRIVATE github.com/lopezator/filterer
+FROM golang:1.21.4-bookworm AS build
 
 # Install dependencies.
 RUN apt-get update && \
@@ -28,6 +25,12 @@ RUN unzip -oj $GOOGLEAPIS_ZIP -d /usr/local/include/google/api 'googleapis-'$GOO
 RUN rm -f $GOOGLEAPIS_ZIP
 
 # Copy current workspace.
-ENV PKGPATH github.com/lopezator/filterer
-WORKDIR ${GOPATH}/src/${PKGPATH}
-COPY . ${GOPATH}/src/${PKGPATH}
+WORKDIR /go/src/github.com/lopezator/filterer
+COPY . .
+RUN go mod download
+RUN CGO_ENABLED=0 go build -o /go/bin/filterer ./cmd/filterer
+
+# Now copy it into our base image.
+FROM gcr.io/distroless/static-debian12
+COPY --from=build /go/bin/filterer /
+ENTRYPOINT ["/filterer"]
