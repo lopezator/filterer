@@ -2,26 +2,26 @@ package filterer
 
 import (
 	"context"
+	"net/http"
 
-	filtererpb "github.com/lopezator/filterer/api/lopezator/filterer/v1"
-	"google.golang.org/grpc"
+	"connectrpc.com/connect"
+	filtererpb "github.com/lopezator/filterer/api/v1"
+	"github.com/lopezator/filterer/api/v1/filtererv1connect"
 )
 
-// Server is a grPC server.
-type Server struct{}
-
-// NewServer returns a Server instance.
-func NewServer() (*Server, error) {
-	return &Server{}, nil
+// Service is the filterer service implementation.
+type Service struct {
+	filtererv1connect.UnimplementedFiltererServiceHandler
 }
 
-// Register implements http.Registerer.Register.
-func (s *Server) Register(srv *grpc.Server) error {
-	filtererpb.RegisterFiltererServiceServer(srv, s)
-	return nil
+// NewService returns a service instance.
+func NewService() (string, http.Handler) {
+	return filtererv1connect.NewFiltererServiceHandler(&Service{})
 }
 
 // Filter implements filterer.FiltererServiceServer.Filter.
-func (s *Server) Filter(ctx context.Context, req *filtererpb.FilterRequest) (*filtererpb.FilterResponse, error) {
-	return &filtererpb.FilterResponse{Sql: "select * from filterer"}, nil
+func (s *Service) Filter(context.Context, *connect.Request[filtererpb.FilterRequest]) (*connect.Response[filtererpb.FilterResponse], error) {
+	return connect.NewResponse(&filtererpb.FilterResponse{
+		Sql: "select * from filterer",
+	}), nil
 }

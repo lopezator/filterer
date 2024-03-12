@@ -2,63 +2,50 @@ package server
 
 import (
 	"fmt"
-	"log"
-	"net"
+	"net/http"
 
 	"github.com/lopezator/filterer/internal/filterer"
-	"google.golang.org/grpc"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
-// Registerer is an interface for registering gRPC services.
-type Registerer interface {
-	Register(*grpc.Server) error
+// Handler is an interface for handling gRPC services.
+type Handler interface {
+	Handle() (string, http.Handler)
 }
 
 // Config holds necessary server configuration parameters
 type Config struct {
-	GRPCAddr string
+	Addr string
 }
 
 // Server is a meta-server composed by a grpc server and a http server
 type Server struct {
-	GRPCAddr    string
-	Registerers []Registerer
+	addr string
+	mux  *http.ServeMux
 }
 
 // New creates a new Server.
 func New(cfg *Config) (*Server, error) {
-	filtererServer, err := filterer.NewServer()
-	if err != nil {
-		return nil, err
-	}
+	// Create a new mux
+	mux := http.NewServeMux()
+
+	// Add services to the mux
+	mux.Handle(filterer.NewService())
+
+	// Return the server
 	return &Server{
-		GRPCAddr: cfg.GRPCAddr,
-		Registerers: []Registerer{
-			filtererServer,
-		},
+		addr: cfg.Addr,
+		mux:  mux,
 	}, nil
 }
 
-// Serve creates a new gRPC server.
+// Serve serves the grpc + rest server.
 func (s *Server) Serve() error {
-	// Initialize & register gRPC services.
-	srv := grpc.NewServer()
-	for _, registerer := range s.Registerers {
-		err := registerer.Register(srv)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Listen on the specified address & serve.
-	listener, err := net.Listen("tcp", s.GRPCAddr)
-	if err != nil {
-		return fmt.Errorf("server: failed to listen: %w", err)
-	}
-	log.Printf("server: server listening at %v", listener.Addr())
-	if err := srv.Serve(listener); err != nil {
-		return fmt.Errorf("server: failed to serve: %w", err)
-	}
-
-	return nil
+	fmt.Println("... Listening on", s.addr)
+	return http.ListenAndServe(
+		s.addr,
+		// For gRPC clients, it's convenient to support HTTP/2 without TLS.
+		h2c.NewHandler(s.mux, &http2.Server{}),
+	)
 }

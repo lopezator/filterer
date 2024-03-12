@@ -2,12 +2,11 @@ syntax = "proto3";
 
 package lopezator.filterer.v1;
 
-option go_package = "github.com/lopezator/filterer-go/filterer/v1;filterer";
-
 // The filterer service definition.
 service FiltererService {
   // Filter does the filterer magic!
-  rpc Filter (FilterRequest) returns (FilterResponse) {}
+  rpc Filter (FilterRequest) returns (FilterResponse) {
+  }
 }
 
 // The request message containing the table and the filter string.
