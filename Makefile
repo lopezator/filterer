@@ -8,7 +8,7 @@ build: api-build
 
 .PHONY: api-build
 api-build:
-	find . -type f -name '*.pb.go' -delete
 	docker compose up -d --build filterer
 	docker compose exec filterer ./api/generate.sh
 	docker compose cp filterer:/go/src/github.com/lopezator/filterer/api .
+	docker compose down

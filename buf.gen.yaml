@@ -1,0 +1,14 @@
+version: v1
+managed:
+  enabled: true
+  go_package_prefix:
+    default: github.com/lopezator/filterer/api
+    except:
+      - buf.build/googleapis/googleapis
+plugins:
+  - plugin: buf.build/protocolbuffers/go
+    out: api
+    opt: paths=source_relative
+  - plugin: buf.build/connectrpc/go
+    out: api
+    opt: paths=source_relative

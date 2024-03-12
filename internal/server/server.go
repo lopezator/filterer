@@ -2,16 +2,15 @@ package server
 
 import (
 	"fmt"
-	"log"
-	"net"
+	"net/http"
 
+	"connectrpc.com/vanguard"
 	"github.com/lopezator/filterer/internal/filterer"
-	"google.golang.org/grpc"
 )
 
-// Registerer is an interface for registering gRPC services.
-type Registerer interface {
-	Register(*grpc.Server) error
+// Handler is an interface for handling gRPC services.
+type Handler interface {
+	Handle() (string, http.Handler)
 }
 
 // Config holds necessary server configuration parameters
@@ -21,44 +20,26 @@ type Config struct {
 
 // Server is a meta-server composed by a grpc server and a http server
 type Server struct {
-	GRPCAddr    string
-	Registerers []Registerer
+	GRPCAddr   string
+	Transcoder *vanguard.Transcoder
 }
 
 // New creates a new Server.
 func New(cfg *Config) (*Server, error) {
-	filtererServer, err := filterer.NewServer()
+	transcoder, err := vanguard.NewTranscoder([]*vanguard.Service{
+		filterer.NewService(),
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &Server{
-		GRPCAddr: cfg.GRPCAddr,
-		Registerers: []Registerer{
-			filtererServer,
-		},
+		GRPCAddr:   cfg.GRPCAddr,
+		Transcoder: transcoder,
 	}, nil
 }
 
-// Serve creates a new gRPC server.
+// Serve serves the grpc + rest server.
 func (s *Server) Serve() error {
-	// Initialize & register gRPC services.
-	srv := grpc.NewServer()
-	for _, registerer := range s.Registerers {
-		err := registerer.Register(srv)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Listen on the specified address & serve.
-	listener, err := net.Listen("tcp", s.GRPCAddr)
-	if err != nil {
-		return fmt.Errorf("server: failed to listen: %w", err)
-	}
-	log.Printf("server: server listening at %v", listener.Addr())
-	if err := srv.Serve(listener); err != nil {
-		return fmt.Errorf("server: failed to serve: %w", err)
-	}
-
-	return nil
+	fmt.Println("... Listening on", s.GRPCAddr)
+	return http.ListenAndServe(s.GRPCAddr, s.Transcoder)
 }
