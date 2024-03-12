@@ -31,6 +31,6 @@ RUN go mod download
 RUN CGO_ENABLED=0 go build -o /go/bin/filterer ./cmd/filterer
 
 # Now copy it into our base image.
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/static-debian12 AS prod
 COPY --from=build /go/bin/filterer /
 ENTRYPOINT ["/filterer"]
