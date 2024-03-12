@@ -19,7 +19,7 @@ func newServeCommand() *subcommands.Command {
 	cfg := &server.Config{}
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	_ = fs.String("config", "", "config file (optional)")
-	fs.StringVar(&cfg.GRPCAddr, "grpc-addr", "localhost:8001", "gRPC address")
+	fs.StringVar(&cfg.Addr, "addr", ":8001", "server address")
 	return subcommands.NewCommand(fs.Name(), fs, func() error {
 		srv, err := server.New(cfg)
 		if err != nil {
