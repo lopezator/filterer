@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  filterer:
+    build:
+      context: .
+      target: build
+    image: filterer:build
+    tty: true
