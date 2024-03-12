@@ -7,7 +7,7 @@ require (
 	github.com/google/cel-go v0.5.1
 	github.com/peterbourgon/ff/v3 v3.4.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5
-	google.golang.org/grpc v1.58.0
+	google.golang.org/grpc v1.58.3
 	google.golang.org/protobuf v1.31.0
 )
 
