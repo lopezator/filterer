@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
-	filtererpb "github.com/lopezator/filterer/api/v1"
-	"github.com/lopezator/filterer/api/v1/filtererv1connect"
+	filtererpb "github.com/lopezator/filterer/api/lopezator/filterer/v1"
+	"github.com/lopezator/filterer/api/lopezator/filterer/v1/filtererv1connect"
 )
 
 // Service is the filterer service implementation.
