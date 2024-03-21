@@ -3,8 +3,6 @@ managed:
   enabled: true
   go_package_prefix:
     default: github.com/lopezator/filterer
-    except:
-      - buf.build/googleapis/googleapis
 plugins:
   - plugin: buf.build/protocolbuffers/go
     out: .
