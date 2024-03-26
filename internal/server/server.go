@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
+	connectcors "connectrpc.com/cors"
 	"github.com/lopezator/filterer/internal/filterer"
+	"github.com/rs/cors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -43,9 +45,17 @@ func New(cfg *Config) (*Server, error) {
 // Serve serves the grpc + rest server.
 func (s *Server) Serve() error {
 	fmt.Println("... Listening on", s.addr)
+	// CORS policies.
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: connectcors.AllowedMethods(),
+		AllowedHeaders: connectcors.AllowedHeaders(),
+		ExposedHeaders: connectcors.ExposedHeaders(),
+		MaxAge:         7200,
+	})
 	return http.ListenAndServe(
 		s.addr,
 		// For gRPC clients, it's convenient to support HTTP/2 without TLS.
-		h2c.NewHandler(s.mux, &http2.Server{}),
+		h2c.NewHandler(c.Handler(s.mux), &http2.Server{}),
 	)
 }
