@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"buf.build/gen/go/lopezator/filterer/connectrpc/go/lopezator/filterer/v1/filtererv1connect"
+	filtererpb "buf.build/gen/go/lopezator/filterer/protocolbuffers/go/lopezator/filterer/v1"
 	"connectrpc.com/connect"
-	filtererpb "github.com/lopezator/filterer/api/lopezator/filterer/v1"
-	"github.com/lopezator/filterer/api/lopezator/filterer/v1/filtererv1connect"
 )
 
 // Service is the filterer service implementation.
