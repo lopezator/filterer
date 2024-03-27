@@ -7,16 +7,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # Check out the code.
       - uses: actions/checkout@v4
+      # Set up the buf CLI.
       - uses: bufbuild/buf-setup-action@v1
+      # Check that the protobuf files are well-formed.
       - uses: bufbuild/buf-lint-action@v1
         with:
           input: "proto"
+      # Check that the protobuf files are formatted.
+      - run: buf format proto --exit-code
+      # Check that we are not breaking backwards compatibility.
       - uses: bufbuild/buf-breaking-action@v1
         with:
           input: "proto"
           # The 'main' branch of the GitHub repository that defines the module.
           against: "https://github.com/${GITHUB_REPOSITORY}.git#branch=main,ref=HEAD~1"
+      # Push the changes to the buf.build registry.
       - uses: bufbuild/buf-push-action@v1
         with:
           buf_token: ${{ secrets.BUF_TOKEN }}
