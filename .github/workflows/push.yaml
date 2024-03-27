@@ -22,7 +22,7 @@ jobs:
         with:
           input: "proto"
           # The 'main' branch of the GitHub repository that defines the module.
-          against: "https://github.com/${GITHUB_REPOSITORY}.git#branch=main,ref=HEAD~1"
+          against: "https://github.com/${GITHUB_REPOSITORY}.git#branch=main,ref=HEAD~1,subdir=proto"
       # Push the changes to the buf.build registry.
       - uses: bufbuild/buf-push-action@v1
         with:
