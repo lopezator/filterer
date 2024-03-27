@@ -5,8 +5,8 @@ managed:
     default: github.com/lopezator/filterer
 plugins:
   - plugin: buf.build/protocolbuffers/go
-    out: .
+    out: proto
     opt: paths=source_relative
   - plugin: buf.build/connectrpc/go
-    out: .
+    out: proto
     opt: paths=source_relative
