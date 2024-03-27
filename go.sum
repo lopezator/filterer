@@ -1,7 +1,11 @@
 buf.build/gen/go/lopezator/filterer/connectrpc/go v1.16.0-20240321155901-6b9e7a5bf8a8.1 h1:jdtnBgqr+3lAbJuzPcNxqbhKGNRS54tGDMfUgNGgCVs=
 buf.build/gen/go/lopezator/filterer/connectrpc/go v1.16.0-20240321155901-6b9e7a5bf8a8.1/go.mod h1:LMZKjThlyCXDgUBISqlX84WU5Bj7O5Pgrz+HH5kruy4=
+buf.build/gen/go/lopezator/filterer/connectrpc/go v1.16.0-20240327160219-7738b154eb0a.1 h1:eVFVbAevA+G0N/IFSiAH++W/lZyv5AiXpWjCOxDqGRA=
+buf.build/gen/go/lopezator/filterer/connectrpc/go v1.16.0-20240327160219-7738b154eb0a.1/go.mod h1:UJHQcHFKr9xn9Jm5tNzBX7GSDtlIt3p/FciqGfxcU2g=
 buf.build/gen/go/lopezator/filterer/protocolbuffers/go v1.33.0-20240321155901-6b9e7a5bf8a8.1 h1:/LF1GwB8zYvw9ZlB0LDO0CkA2H8oLZ5L+pXVVit2BIE=
 buf.build/gen/go/lopezator/filterer/protocolbuffers/go v1.33.0-20240321155901-6b9e7a5bf8a8.1/go.mod h1:SPAf+eDVo35HoeMmPHAvtNP2y95Zl0R6Yhrc+2dLDhI=
+buf.build/gen/go/lopezator/filterer/protocolbuffers/go v1.33.0-20240327160219-7738b154eb0a.1 h1:hT0H0MJv4DZO8i/25AfNXmiaZRsIIN8fiaAyiHb4o/4=
+buf.build/gen/go/lopezator/filterer/protocolbuffers/go v1.33.0-20240327160219-7738b154eb0a.1/go.mod h1:SPAf+eDVo35HoeMmPHAvtNP2y95Zl0R6Yhrc+2dLDhI=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 connectrpc.com/connect v1.16.0 h1:rdtfQjZ0OyFkWPTegBNcH7cwquGAN1WzyJy80oFNibg=
 connectrpc.com/connect v1.16.0/go.mod h1:XpZAduBQUySsb4/KO5JffORVkDI4B6/EYPi7N8xpNZw=
