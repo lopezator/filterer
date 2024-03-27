@@ -3,8 +3,8 @@ module github.com/lopezator/filterer
 go 1.20
 
 require (
-	buf.build/gen/go/lopezator/filterer/connectrpc/go v1.16.0-20240321155901-6b9e7a5bf8a8.1
-	buf.build/gen/go/lopezator/filterer/protocolbuffers/go v1.33.0-20240321155901-6b9e7a5bf8a8.1
+	buf.build/gen/go/lopezator/filterer/connectrpc/go v1.16.0-20240327160219-7738b154eb0a.1
+	buf.build/gen/go/lopezator/filterer/protocolbuffers/go v1.33.0-20240327160219-7738b154eb0a.1
 	connectrpc.com/connect v1.16.0
 	github.com/glerchundi/subcommands v0.0.0-20181212083838-923a6ccb11f8
 	github.com/google/cel-go v0.5.1
