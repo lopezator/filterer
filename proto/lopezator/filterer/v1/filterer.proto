@@ -11,7 +11,8 @@ service FiltererService {
 // The request message containing the table and the filter string.
 message FilterRequest {
   string table = 1;
-  string filter = 2;
+  repeated string columns = 2;
+  string expr = 3;
 }
 
 // The response message containing the sql to issue the filtering, based on the filter request.
