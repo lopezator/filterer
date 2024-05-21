@@ -7,7 +7,7 @@ require (
 	buf.build/gen/go/lopezator/filterer/protocolbuffers/go v1.34.1-20240521141429-fc22909e51e2.1
 	connectrpc.com/connect v1.16.0
 	github.com/google/cel-go v0.11.2
-	golang.org/x/net v0.21.0
+	golang.org/x/net v0.23.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	gopkg.in/yaml.v3 v3.0.1
 )
