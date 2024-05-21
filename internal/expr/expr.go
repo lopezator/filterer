@@ -14,8 +14,7 @@ const (
 )
 
 // Node defines a node in a abstract syntax tree.
-type Node interface {
-}
+type Node any
 
 // Expr is the abstract representation of a previously filtered, parsed and
 // checked expression.
@@ -47,13 +46,18 @@ type OrExpr struct {
 
 // OpExpr represents an operation expression node.
 type OpExpr struct {
-	Field *Field
-	Op    string
-	Args  []interface{}
+	Left Node
+	Op   string
+	Args []any
 }
 
 // PresentExpr represents a presence expression node.
 type PresentExpr struct {
+	Field *Field
+}
+
+// SizeExpr represents a size expression node.
+type SizeExpr struct {
 	Field *Field
 }
 

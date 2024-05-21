@@ -1,252 +1,225 @@
 package expr
 
 import (
-	"reflect"
-	"testing"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
 )
 
-func TestSQL(t *testing.T) {
-	t.Parallel()
+// SQL returns a database friendly format composed by a string clause and a
+// slice of args
+func SQL(expr *Expr) (string, []any, error) {
+	return walkSQL(expr.Root)
+}
 
-	firstName := &Field{Name: "first_name", Ftype: StringFieldType}
-	lastName := &Field{Name: "last_name", Ftype: StringFieldType}
-	companyName := &Field{Name: "company.name", Ftype: StringFieldType}
-	companyEmployeeNumber := &Field{Name: "company.employee_number", Ftype: IntegerFieldType}
-	companyLocationName := &Field{Name: "company.location.name", Ftype: StringFieldType}
-	companyLocationZone := &Field{Name: "company.location.zone", Ftype: IntegerFieldType}
-	companyFortune500 := &Field{Name: "company.fortune500", Ftype: BoolFieldType}
-	age := &Field{Name: "age", Ftype: IntegerFieldType}
-	birthDate := &Field{Name: "birth_date", Ftype: TimestampFieldType}
-	tags := &Field{Name: "tags", Ftype: StringArrayFieldType}
+type sqlOperator struct {
+	name        string
+	argModifier func(any) any
+}
 
-	tests := []struct {
-		name     string
-		input    *Expr
-		want     string
-		wantArgs []interface{}
-	}{
-		{
-			name:     "equality",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "==", Args: []interface{}{"A"}}},
-			want:     "LOWER(first_name) = (LOWER(?))",
-			wantArgs: []interface{}{"A"},
+var sqlOperatorLookup = map[string]map[FieldType]*sqlOperator{
+	OperatorEquals: {
+		StringFieldType:  {name: "="},
+		IntegerFieldType: {name: "="},
+		BoolFieldType:    {name: "="},
+	},
+	OperatorNotEquals: {
+		StringFieldType:  {name: "<>"}, // equivalent to != but SQL-92 compliant
+		IntegerFieldType: {name: "<>"}, // equivalent to != but SQL-92 compliant
+	},
+	OperatorGreater: {
+		TimestampFieldType: {name: ">"},
+		IntegerFieldType:   {name: ">"},
+	},
+	OperatorGreaterEquals: {
+		TimestampFieldType: {name: ">="},
+		IntegerFieldType:   {name: ">="},
+	},
+	OperatorLess: {
+		TimestampFieldType: {name: "<"},
+		IntegerFieldType:   {name: "<"},
+	},
+	OperatorLessEquals: {
+		TimestampFieldType: {name: "<="},
+		IntegerFieldType:   {name: "<="},
+	},
+	OperatorIn: {
+		StringFieldType:  {name: "IN"},
+		IntegerFieldType: {name: "IN"},
+	},
+	OperatorStartsWith: {
+		StringFieldType: {
+			name:        "LIKE",
+			argModifier: func(v any) any { return escapeLikeArg(v) + "%" },
 		},
-		{
-			name:     "equality with nested string Field",
-			input:    &Expr{Root: &OpExpr{Field: companyName, Op: "==", Args: []interface{}{"A"}}},
-			want:     "LOWER(company->>'name') = (LOWER(?))",
-			wantArgs: []interface{}{"A"},
+	},
+	OperatorEndsWith: {
+		StringFieldType: {
+			name:        "LIKE",
+			argModifier: func(v any) any { return "%" + escapeLikeArg(v) },
 		},
-		{
-			name:     "equality with nested int64 value",
-			input:    &Expr{Root: &OpExpr{Field: companyEmployeeNumber, Op: "==", Args: []interface{}{1}}},
-			want:     "(company->>'employee_number')::INT = (?)",
-			wantArgs: []interface{}{1},
+	},
+	OperatorContains: {
+		StringFieldType: {
+			name:        "LIKE",
+			argModifier: func(v any) any { return "%" + escapeLikeArg(v) + "%" },
 		},
-		{
-			name:     "equality with nested bool value",
-			input:    &Expr{Root: &OpExpr{Field: companyFortune500, Op: "==", Args: []interface{}{true}}},
-			want:     "(company->>'fortune500')::BOOL = (?)",
-			wantArgs: []interface{}{true},
+		StringArrayFieldType: {
+			name:        "@>",
+			argModifier: func(v any) any { return "{" + escapeLikeArg(v) + "}" },
 		},
-		{
-			name:     "equality with nested string value of depth 2",
-			input:    &Expr{Root: &OpExpr{Field: companyLocationName, Op: "==", Args: []interface{}{"A"}}},
-			want:     "LOWER(company->location->>'name') = (LOWER(?))",
-			wantArgs: []interface{}{"A"},
-		},
-		{
-			name:     "equality with nested int64 value of depth 2",
-			input:    &Expr{Root: &OpExpr{Field: companyLocationZone, Op: "==", Args: []interface{}{1}}},
-			want:     "(company->location->>'zone')::INT = (?)",
-			wantArgs: []interface{}{1},
-		},
-		{
-			name:     "equality with int64 value",
-			input:    &Expr{Root: &OpExpr{Field: age, Op: "==", Args: []interface{}{"1"}}},
-			want:     "age = (?)",
-			wantArgs: []interface{}{"1"},
-		},
-		{
-			name:     "not equals",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "!=", Args: []interface{}{"A"}}},
-			want:     "LOWER(first_name) <> (LOWER(?))",
-			wantArgs: []interface{}{"A"},
-		},
-		{
-			name:     "not equals with int64 value",
-			input:    &Expr{Root: &OpExpr{Field: age, Op: "!=", Args: []interface{}{"1"}}},
-			want:     "age <> (?)",
-			wantArgs: []interface{}{"1"},
-		},
-		{
-			name: "not",
-			input: &Expr{Root: &NotExpr{
-				Not: &OpExpr{Field: firstName, Op: "==", Args: []interface{}{"A"}},
-			}},
-			want:     "NOT (LOWER(first_name) = (LOWER(?)))",
-			wantArgs: []interface{}{"A"},
-		},
-		{
-			name: "and",
-			input: &Expr{Root: &AndExpr{
-				Left:  &OpExpr{Field: firstName, Op: "==", Args: []interface{}{"A"}},
-				Right: &OpExpr{Field: lastName, Op: "==", Args: []interface{}{"B"}},
-			}},
-			want:     "(LOWER(first_name) = (LOWER(?)) AND LOWER(last_name) = (LOWER(?)))",
-			wantArgs: []interface{}{"A", "B"},
-		},
-		{
-			name: "or",
-			input: &Expr{Root: &OrExpr{
-				Left:  &OpExpr{Field: firstName, Op: "==", Args: []interface{}{"A"}},
-				Right: &OpExpr{Field: lastName, Op: "==", Args: []interface{}{"B"}},
-			}},
-			want:     "(LOWER(first_name) = (LOWER(?)) OR LOWER(last_name) = (LOWER(?)))",
-			wantArgs: []interface{}{"A", "B"},
-		},
-		{
-			name: "precedence between and/or",
-			input: &Expr{Root: &OrExpr{
-				Left: &AndExpr{
-					Left:  &OpExpr{Field: firstName, Op: "==", Args: []interface{}{"A"}},
-					Right: &OpExpr{Field: lastName, Op: "==", Args: []interface{}{"B"}},
-				},
-				Right: &OpExpr{Field: lastName, Op: "==", Args: []interface{}{"C"}},
-			}},
-			want:     "((LOWER(first_name) = (LOWER(?)) AND LOWER(last_name) = (LOWER(?))) OR LOWER(last_name) = (LOWER(?)))",
-			wantArgs: []interface{}{"A", "B", "C"},
-		},
-		{
-			name: "precedence between and/or overruled by using parentheses",
-			input: &Expr{Root: &AndExpr{
-				Left: &OpExpr{Field: firstName, Op: "==", Args: []interface{}{"A"}},
-				Right: &OrExpr{
-					Left:  &OpExpr{Field: lastName, Op: "==", Args: []interface{}{"B"}},
-					Right: &OpExpr{Field: lastName, Op: "==", Args: []interface{}{"C"}},
-				},
-			}},
-			want:     "(LOWER(first_name) = (LOWER(?)) AND (LOWER(last_name) = (LOWER(?)) OR LOWER(last_name) = (LOWER(?))))",
-			wantArgs: []interface{}{"A", "B", "C"},
-		},
-		{
-			name:     "startsWith",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "startsWith", Args: []interface{}{"A"}}},
-			want:     "LOWER(first_name) LIKE (LOWER(?))",
-			wantArgs: []interface{}{"A%"},
-		},
-		{
-			name:     "startsWith containing backslash",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "startsWith", Args: []interface{}{`A\B`}}},
-			want:     "LOWER(first_name) LIKE (LOWER(?))",
-			wantArgs: []interface{}{`A\\B%`},
-		},
-		{
-			name:     "endsWith",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "endsWith", Args: []interface{}{"A"}}},
-			want:     "LOWER(first_name) LIKE (LOWER(?))",
-			wantArgs: []interface{}{"%A"},
-		},
-		{
-			name:     "endsWith containing backslash",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "endsWith", Args: []interface{}{`A\B`}}},
-			want:     "LOWER(first_name) LIKE (LOWER(?))",
-			wantArgs: []interface{}{`%A\\B`},
-		},
-		{
-			name:     "contains",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "contains", Args: []interface{}{"A"}}},
-			want:     "LOWER(first_name) LIKE (LOWER(?))",
-			wantArgs: []interface{}{"%A%"},
-		},
-		{
-			name:     "contains containing backslash",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "contains", Args: []interface{}{`A\B`}}},
-			want:     "LOWER(first_name) LIKE (LOWER(?))",
-			wantArgs: []interface{}{`%A\\B%`},
-		},
-		{
-			name:     "contains with with string array field type",
-			input:    &Expr{Root: &OpExpr{Field: tags, Op: "contains", Args: []interface{}{"A"}}},
-			want:     "tags @> (?)",
-			wantArgs: []interface{}{"{A}"},
-		},
-		{
-			name:     "in",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "in", Args: []interface{}{"A"}}},
-			want:     "LOWER(first_name) IN (LOWER(?))",
-			wantArgs: []interface{}{"A"},
-		},
-		{
-			name:     "in with multiple values",
-			input:    &Expr{Root: &OpExpr{Field: firstName, Op: "in", Args: []interface{}{"A", "B"}}},
-			want:     "LOWER(first_name) IN (LOWER(?),LOWER(?))",
-			wantArgs: []interface{}{"A", "B"},
-		},
-		{
-			name:     "in with int value",
-			input:    &Expr{Root: &OpExpr{Field: age, Op: "in", Args: []interface{}{"35"}}},
-			want:     "age IN (?)",
-			wantArgs: []interface{}{"35"},
-		},
-		{
-			name:     "in with multiple int values",
-			input:    &Expr{Root: &OpExpr{Field: age, Op: "in", Args: []interface{}{"2", "15", "35"}}},
-			want:     "age IN (?,?,?)",
-			wantArgs: []interface{}{"2", "15", "35"},
-		},
-		{
-			name:     "greater than with timestamp value",
-			input:    &Expr{Root: &OpExpr{Field: birthDate, Op: ">", Args: []interface{}{"1983-12-10T11:03:27Z"}}},
-			want:     "birth_date > (?)",
-			wantArgs: []interface{}{"1983-12-10T11:03:27Z"},
-		},
-		{
-			name:     "greaterEquals than with timestamp value",
-			input:    &Expr{Root: &OpExpr{Field: birthDate, Op: ">=", Args: []interface{}{"1983-12-10T11:03:27Z"}}},
-			want:     "birth_date >= (?)",
-			wantArgs: []interface{}{"1983-12-10T11:03:27Z"},
-		},
-		{
-			name:     "less than with timestamp value",
-			input:    &Expr{Root: &OpExpr{Field: birthDate, Op: "<", Args: []interface{}{"1983-12-10T11:03:27Z"}}},
-			want:     "birth_date < (?)",
-			wantArgs: []interface{}{"1983-12-10T11:03:27Z"},
-		},
-		{
-			name:     "lessEquals than with timestamp value",
-			input:    &Expr{Root: &OpExpr{Field: birthDate, Op: "<=", Args: []interface{}{"1983-12-10T11:03:27Z"}}},
-			want:     "birth_date <= (?)",
-			wantArgs: []interface{}{"1983-12-10T11:03:27Z"},
-		},
-		{
-			name:     "present",
-			input:    &Expr{Root: &PresentExpr{Field: firstName}},
-			want:     "first_name IS NOT NULL",
-			wantArgs: []interface{}{},
-		},
-		{
-			name:     "present with nested",
-			input:    &Expr{Root: &PresentExpr{Field: companyName}},
-			want:     "company->>'name' IS NOT NULL",
-			wantArgs: []interface{}{},
-		},
-	}
+	},
+}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			gotClause, gotArgs, err := SQL(tt.input)
+// escapeLikeArg gets a SQL arg and returns its equivalent SQL-LIKE needed
+// escaped arg. In SQL-92, backslash is used as the escape character, thus any
+// arg containing a backslash needs to be doubled in order to be escaped
+// correctly inside LIKE queries.
+func escapeLikeArg(arg any) string {
+	return strings.ReplaceAll(arg.(string), `\`, `\\`)
+}
+
+func walkSQL(node Node) (string, []any, error) {
+	switch e := node.(type) {
+	case *NotExpr:
+		clause, args, err := walkSQL(e.Not)
+		if err != nil {
+			return "", nil, err
+		}
+		// Although it seems countersqlintuitive, these kind of queries do the
+		// same if the NOT is used just before the IN operation or embracing
+		// everything including the ident as the query planner correctly chooses
+		// what to do:
+		//
+		// sql> EXPLAIN SELECT * FROM users WHERE NOT (name_id IN ('burt-warren'));
+		// tree | field  |           description
+		// +------+--------+---------------------------------+
+		// scan |        |
+		// 	| table  | users@primary
+		// 	| spans  | ALL
+		// 	| filter | name_id NOT IN ('burt-warren',)
+		//
+		// sql> EXPLAIN SELECT * FROM users WHERE name_id NOT IN ('burt-warren');
+		// tree | field  |           description
+		// +------+--------+---------------------------------+
+		// scan |        |
+		// 	| table  | users@primary
+		// 	| spans  | ALL
+		// 	| filter | name_id NOT IN ('burt-warren',)
+		return fmt.Sprintf("NOT (%s)", clause), args, nil
+	case *AndExpr:
+		lclause, largs, err := walkSQL(e.Left)
+		if err != nil {
+			return "", nil, err
+		}
+		rclause, rargs, err := walkSQL(e.Right)
+		if err != nil {
+			return "", nil, err
+		}
+		return fmt.Sprintf("(%s AND %s)", lclause, rclause), append(largs, rargs...), nil
+	case *OrExpr:
+		lclause, largs, err := walkSQL(e.Left)
+		if err != nil {
+			return "", nil, err
+		}
+		rclause, rargs, err := walkSQL(e.Right)
+		if err != nil {
+			return "", nil, err
+		}
+		return fmt.Sprintf("(%s OR %s)", lclause, rclause), append(largs, rargs...), nil
+	case *OpExpr:
+		switch kind := e.Left.(type) {
+		case *SizeExpr:
+			lclause, _, err := walkSQL(e.Left)
 			if err != nil {
-				t.Errorf("SQL() error: %v", err)
+				return "", nil, err
 			}
-			if gotClause != tt.want {
-				t.Errorf("SQL() got: %v, want %v", gotClause, tt.want)
+			sqlOp, ok := sqlOperatorLookup[e.Op][IntegerFieldType]
+			if !ok {
+				return "", nil, errors.New("expr: unsupported operation expression")
 			}
-			if !reflect.DeepEqual(tt.wantArgs, gotArgs) {
-				t.Errorf("SQL() got: %v, want %v", gotArgs, tt.wantArgs)
+			parameters := strings.TrimRight(strings.Repeat("?,", len(e.Args)), ",")
+			return fmt.Sprintf("%s %s %s", lclause, sqlOp.name, parameters), e.Args, nil
+		case *Field:
+			sqlOp, ok := sqlOperatorLookup[e.Op][kind.Ftype]
+			if !ok {
+				return "", nil, errors.New("expr: unsupported operation expression")
 			}
-		})
+
+			var args []any
+			if sqlOp.argModifier != nil {
+				args = make([]any, len(e.Args))
+				for i := 0; i < len(e.Args); i++ {
+					args[i] = sqlOp.argModifier(e.Args[i])
+				}
+			} else {
+				args = e.Args
+			}
+
+			columnName, err := columnName(kind.Name, kind.Ftype, len(args))
+			if err != nil {
+				return "", nil, err
+			}
+
+			// As this SQL is supported SELECT ... WHERE name_id = ('burt-warren'),
+			// we choose to always embrace with parentheses.
+			switch kind.Ftype {
+			// Enclose field and args with LOWER() in case of string query for a
+			// case insensitive query.
+			case StringFieldType:
+				parameters := fmt.Sprintf("(%s)", strings.TrimRight(strings.Repeat("LOWER(?),", len(args)), ","))
+				return fmt.Sprintf("LOWER(%s) %s %s", columnName, sqlOp.name, parameters), args, nil
+			default:
+				parameters := fmt.Sprintf("(%s)", strings.TrimRight(strings.Repeat("?,", len(args)), ","))
+				return fmt.Sprintf("%s %s %s", columnName, sqlOp.name, parameters), args, nil
+			}
+		default:
+			return "", nil, errors.New("expr: unsupported operation expression")
+
+		}
+	case *PresentExpr:
+		columnName, err := columnName(e.Field.Name, e.Field.Ftype, 0)
+		if err != nil {
+			return "", nil, err
+		}
+		return fmt.Sprintf("%s IS NOT NULL", columnName), []any{}, nil
+	case *SizeExpr:
+		return fmt.Sprintf("json_array_length(%s)", e.Field.Name), []any{}, nil
+	default:
+		return "", nil, errors.New("expr: unsupported expression")
 	}
+}
+
+// This regex is used to obtain the values before and after the last operator "->"
+// example: "apple_hub->apple_key->owner_name" would be:
+// - $1 := "apple_hub->apple_key"
+// - $2 := "owner_name"
+var re = regexp.MustCompile(`(.*)->(\w+)$`)
+
+// Using the regex above, we can transform the string to allow nested searches.
+// example: "apple_hub.apple_key.owner_name" would be:
+// - "apple_hub->apple_key->>'owner_name'"
+func columnName(fieldName string, fieldType FieldType, numArgs int) (string, error) {
+	// nested equality logic
+	if strings.Contains(fieldName, ".") {
+		if numArgs > 1 {
+			return "", fmt.Errorf("expr: unsupported multiple args for nested type")
+		}
+		fieldName = strings.ReplaceAll(fieldName, ".", "->")
+		fieldName = re.ReplaceAllString(fieldName, `$1->>'$2'`)
+		switch fieldType {
+		case BoolFieldType:
+			fieldName = fmt.Sprintf("(%s)::BOOL", fieldName)
+		case IntegerFieldType:
+			fieldName = fmt.Sprintf("(%s)::INT", fieldName)
+		case DoubleFieldType:
+			fieldName = fmt.Sprintf("(%s)::FLOAT", fieldName)
+		case BytesFieldType:
+			fieldName = fmt.Sprintf("(%s)::BYTES", fieldName)
+		case TimestampFieldType:
+			fieldName = fmt.Sprintf("(%s)::TIMESTAMP", fieldName)
+		}
+	}
+	return fieldName, nil
 }

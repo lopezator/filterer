@@ -16,10 +16,11 @@ type Handler interface {
 
 // Config holds necessary server configuration parameters
 type Config struct {
-	Addr string
+	Addr      string               `yaml:"addr"`
+	FieldSets []*filterer.FieldSet `yaml:"field_sets"`
 }
 
-// Server is a meta-server composed by a grpc server and a http server
+// Server is a meta-server composed by a grpc server and an http server
 type Server struct {
 	addr string
 	mux  *http.ServeMux
@@ -31,7 +32,7 @@ func New(cfg *Config) (*Server, error) {
 	mux := http.NewServeMux()
 
 	// Add services to the mux
-	mux.Handle(filterer.NewService())
+	mux.Handle(filterer.NewService(cfg.FieldSets))
 
 	// Return the server
 	return &Server{

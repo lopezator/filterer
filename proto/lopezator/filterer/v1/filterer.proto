@@ -10,25 +10,8 @@ service FiltererService {
 
 // The request message containing the table and the filter string.
 message FilterRequest {
-  // The column type.
-  message Column {
-    // The column name.
-    string name = 1;
-    // The column type.
-    enum Type {
-      TYPE_UNSPECIFIED = 0;
-      TYPE_STRING = 1;
-      TYPE_INT = 2;
-      TYPE_BOOL = 3;
-      TYPE_LIST = 4;
-      TYPE_TIMESTAMP = 5;
-    }
-    Type type = 2;
-  }
-  // A list of filterable columns.
-  repeated Column columns = 1;
   // The filter expression.
-  string expr = 2;
+  string expr = 1;
 }
 
 // The response message containing the sql to issue the filtering, based on the filter request.

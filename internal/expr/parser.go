@@ -1,10 +1,11 @@
 package expr
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"errors"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"
@@ -147,15 +148,19 @@ func StandardDeclarations() []*exprpb.Decl {
 		),
 		decls.NewFunction(operators.Less,
 			decls.NewOverload(overloads.LessTimestamp, []*exprpb.Type{decls.Timestamp, decls.Timestamp}, decls.Bool),
+			decls.NewOverload(overloads.LessInt64, []*exprpb.Type{decls.Int, decls.Int}, decls.Bool),
 		),
 		decls.NewFunction(operators.LessEquals,
 			decls.NewOverload(overloads.LessEqualsTimestamp, []*exprpb.Type{decls.Timestamp, decls.Timestamp}, decls.Bool),
+			decls.NewOverload(overloads.LessEqualsInt64, []*exprpb.Type{decls.Int, decls.Int}, decls.Bool),
 		),
 		decls.NewFunction(operators.Greater,
 			decls.NewOverload(overloads.GreaterTimestamp, []*exprpb.Type{decls.Timestamp, decls.Timestamp}, decls.Bool),
+			decls.NewOverload(overloads.GreaterInt64, []*exprpb.Type{decls.Int, decls.Int}, decls.Bool),
 		),
 		decls.NewFunction(operators.GreaterEquals,
 			decls.NewOverload(overloads.GreaterEqualsTimestamp, []*exprpb.Type{decls.Timestamp, decls.Timestamp}, decls.Bool),
+			decls.NewOverload(overloads.GreaterEqualsInt64, []*exprpb.Type{decls.Int, decls.Int}, decls.Bool),
 		),
 		decls.NewFunction(overloads.TypeConvertTimestamp,
 			decls.NewOverload(overloads.StringToTimestamp, []*exprpb.Type{decls.String}, decls.Timestamp),
@@ -168,6 +173,9 @@ func StandardDeclarations() []*exprpb.Decl {
 			decls.NewOverload("present_bytes", []*exprpb.Type{decls.Bytes}, decls.Bool),
 			decls.NewOverload("present_double", []*exprpb.Type{decls.Double}, decls.Bool),
 			decls.NewOverload("present_timestamp", []*exprpb.Type{decls.Timestamp}, decls.Bool),
+		),
+		decls.NewFunction(overloads.Size,
+			decls.NewOverload(overloads.SizeList, []*exprpb.Type{decls.NewListType(decls.String)}, decls.Int),
 		),
 	}
 }
@@ -243,18 +251,33 @@ func (p *Parser) walk(callExpr *exprpb.Expr_Call, depth int) (Node, error) {
 			return nil, errors.New("expr: failed to cast to ident expression")
 		}
 		return &PresentExpr{Field: p.fields[identExpr.IdentExpr.Name]}, nil
+	case overloads.Size:
+		identExpr, ok := callExpr.Args[0].ExprKind.(*exprpb.Expr_IdentExpr)
+		if !ok {
+			return nil, errors.New("expr: failed to cast to ident expression")
+		}
+		return &SizeExpr{Field: p.fields[identExpr.IdentExpr.Name]}, nil
 	default:
 		return nil, errors.New("expr: unsupported call expression function")
 	}
 }
 
 func (p *Parser) opExpr(op string, leftExpr, rightExpr *exprpb.Expr) (*OpExpr, error) {
-	identExpr, ok := leftExpr.ExprKind.(*exprpb.Expr_IdentExpr)
-	if !ok {
-		return nil, errors.New("expr: failed to cast to ident expression")
+	var left Node
+	switch kind := leftExpr.ExprKind.(type) {
+	case *exprpb.Expr_IdentExpr:
+		left = p.fields[kind.IdentExpr.Name]
+	case *exprpb.Expr_CallExpr:
+		var err error
+		left, err = p.walk(kind.CallExpr, 1)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.New("expr: unsupported left expression")
 	}
 
-	var args []interface{}
+	var args []any
 	if listExpr, ok := rightExpr.ExprKind.(*exprpb.Expr_ListExpr); ok {
 		for _, elemExpr := range listExpr.ListExpr.GetElements() {
 			arg, err := value(elemExpr.ExprKind)
@@ -268,17 +291,17 @@ func (p *Parser) opExpr(op string, leftExpr, rightExpr *exprpb.Expr) (*OpExpr, e
 		if err != nil {
 			return nil, err
 		}
-		args = []interface{}{arg}
+		args = []any{arg}
 	}
 
 	return &OpExpr{
-		Field: p.fields[identExpr.IdentExpr.Name],
-		Op:    strings.Trim(strings.Trim(op, "_"), "@"),
-		Args:  args,
+		Left: left,
+		Op:   strings.Trim(strings.Trim(op, "_"), "@"),
+		Args: args,
 	}, nil
 }
 
-func value(expr interface{}) (interface{}, error) {
+func value(expr any) (any, error) {
 	var constant *exprpb.Constant
 	var isTimestamp bool
 	switch valueExpr := expr.(type) {

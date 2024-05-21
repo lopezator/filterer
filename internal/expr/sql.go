@@ -1,21 +1,22 @@
 package expr
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"errors"
 )
 
 // SQL returns a database friendly format composed by a string clause and a
 // slice of args
-func SQL(expr *Expr) (string, []interface{}, error) {
+func SQL(expr *Expr) (string, []any, error) {
 	return walkSQL(expr.Root)
 }
 
 type sqlOperator struct {
 	name        string
-	argModifier func(interface{}) interface{}
+	argModifier func(any) any
 }
 
 var sqlOperatorLookup = map[string]map[FieldType]*sqlOperator{
@@ -30,15 +31,19 @@ var sqlOperatorLookup = map[string]map[FieldType]*sqlOperator{
 	},
 	OperatorGreater: {
 		TimestampFieldType: {name: ">"},
+		IntegerFieldType:   {name: ">"},
 	},
 	OperatorGreaterEquals: {
 		TimestampFieldType: {name: ">="},
+		IntegerFieldType:   {name: ">="},
 	},
 	OperatorLess: {
 		TimestampFieldType: {name: "<"},
+		IntegerFieldType:   {name: "<"},
 	},
 	OperatorLessEquals: {
 		TimestampFieldType: {name: "<="},
+		IntegerFieldType:   {name: "<="},
 	},
 	OperatorIn: {
 		StringFieldType:  {name: "IN"},
@@ -47,23 +52,23 @@ var sqlOperatorLookup = map[string]map[FieldType]*sqlOperator{
 	OperatorStartsWith: {
 		StringFieldType: {
 			name:        "LIKE",
-			argModifier: func(v interface{}) interface{} { return escapeLikeArg(v) + "%" },
+			argModifier: func(v any) any { return escapeLikeArg(v) + "%" },
 		},
 	},
 	OperatorEndsWith: {
 		StringFieldType: {
 			name:        "LIKE",
-			argModifier: func(v interface{}) interface{} { return "%" + escapeLikeArg(v) },
+			argModifier: func(v any) any { return "%" + escapeLikeArg(v) },
 		},
 	},
 	OperatorContains: {
 		StringFieldType: {
 			name:        "LIKE",
-			argModifier: func(v interface{}) interface{} { return "%" + escapeLikeArg(v) + "%" },
+			argModifier: func(v any) any { return "%" + escapeLikeArg(v) + "%" },
 		},
 		StringArrayFieldType: {
 			name:        "@>",
-			argModifier: func(v interface{}) interface{} { return "{" + escapeLikeArg(v) + "}" },
+			argModifier: func(v any) any { return "{" + escapeLikeArg(v) + "}" },
 		},
 	},
 }
@@ -72,11 +77,11 @@ var sqlOperatorLookup = map[string]map[FieldType]*sqlOperator{
 // escaped arg. In SQL-92, backslash is used as the escape character, thus any
 // arg containing a backslash needs to be doubled in order to be escaped
 // correctly inside LIKE queries.
-func escapeLikeArg(arg interface{}) string {
+func escapeLikeArg(arg any) string {
 	return strings.ReplaceAll(arg.(string), `\`, `\\`)
 }
 
-func walkSQL(node Node) (string, []interface{}, error) {
+func walkSQL(node Node) (string, []any, error) {
 	switch e := node.(type) {
 	case *NotExpr:
 		clause, args, err := walkSQL(e.Not)
@@ -125,44 +130,63 @@ func walkSQL(node Node) (string, []interface{}, error) {
 		}
 		return fmt.Sprintf("(%s OR %s)", lclause, rclause), append(largs, rargs...), nil
 	case *OpExpr:
-		sqlOp, ok := sqlOperatorLookup[e.Op][e.Field.Ftype]
-		if !ok {
-			return "", nil, errors.New("expr: unsupported operation expression")
-		}
-
-		var args []interface{}
-		if sqlOp.argModifier != nil {
-			args = make([]interface{}, len(e.Args))
-			for i := 0; i < len(e.Args); i++ {
-				args[i] = sqlOp.argModifier(e.Args[i])
+		switch kind := e.Left.(type) {
+		case *SizeExpr:
+			lclause, _, err := walkSQL(e.Left)
+			if err != nil {
+				return "", nil, err
 			}
-		} else {
-			args = e.Args
-		}
+			sqlOp, ok := sqlOperatorLookup[e.Op][IntegerFieldType]
+			if !ok {
+				return "", nil, errors.New("expr: unsupported operation expression")
+			}
+			parameters := strings.TrimRight(strings.Repeat("?,", len(e.Args)), ",")
+			return fmt.Sprintf("%s %s %s", lclause, sqlOp.name, parameters), e.Args, nil
+		case *Field:
+			sqlOp, ok := sqlOperatorLookup[e.Op][kind.Ftype]
+			if !ok {
+				return "", nil, errors.New("expr: unsupported operation expression")
+			}
 
-		columnName, err := columnName(e.Field.Name, e.Field.Ftype, len(args))
-		if err != nil {
-			return "", nil, err
-		}
+			var args []any
+			if sqlOp.argModifier != nil {
+				args = make([]any, len(e.Args))
+				for i := 0; i < len(e.Args); i++ {
+					args[i] = sqlOp.argModifier(e.Args[i])
+				}
+			} else {
+				args = e.Args
+			}
 
-		// As this SQL is supported SELECT ... WHERE name_id = ('burt-warren'),
-		// we choose to always embrace with parentheses.
-		switch e.Field.Ftype {
-		// Enclose field and args with LOWER() in case of string query for a
-		// case insensitive query.
-		case StringFieldType:
-			parameters := fmt.Sprintf("(%s)", strings.TrimRight(strings.Repeat("LOWER(?),", len(args)), ","))
-			return fmt.Sprintf("LOWER(%s) %s %s", columnName, sqlOp.name, parameters), args, nil
+			columnName, err := columnName(kind.Name, kind.Ftype, len(args))
+			if err != nil {
+				return "", nil, err
+			}
+
+			// As this SQL is supported SELECT ... WHERE name_id = ('burt-warren'),
+			// we choose to always embrace with parentheses.
+			switch kind.Ftype {
+			// Enclose field and args with LOWER() in case of string query for a
+			// case insensitive query.
+			case StringFieldType:
+				parameters := fmt.Sprintf("(%s)", strings.TrimRight(strings.Repeat("LOWER(?),", len(args)), ","))
+				return fmt.Sprintf("LOWER(%s) %s %s", columnName, sqlOp.name, parameters), args, nil
+			default:
+				parameters := fmt.Sprintf("(%s)", strings.TrimRight(strings.Repeat("?,", len(args)), ","))
+				return fmt.Sprintf("%s %s %s", columnName, sqlOp.name, parameters), args, nil
+			}
 		default:
-			parameters := fmt.Sprintf("(%s)", strings.TrimRight(strings.Repeat("?,", len(args)), ","))
-			return fmt.Sprintf("%s %s %s", columnName, sqlOp.name, parameters), args, nil
+			return "", nil, errors.New("expr: unsupported operation expression")
+
 		}
 	case *PresentExpr:
 		columnName, err := columnName(e.Field.Name, e.Field.Ftype, 0)
 		if err != nil {
 			return "", nil, err
 		}
-		return fmt.Sprintf("%s IS NOT NULL", columnName), []interface{}{}, nil
+		return fmt.Sprintf("%s IS NOT NULL", columnName), []any{}, nil
+	case *SizeExpr:
+		return fmt.Sprintf("json_array_length(%s)", e.Field.Name), []any{}, nil
 	default:
 		return "", nil, errors.New("expr: unsupported expression")
 	}

@@ -1,0 +1,9 @@
+addr: 'localhost:1337'
+field_sets:
+  - id: 'users'
+    fields:
+      - name: 'display_name'
+        type: 'string'
+
+      - name: 'email'
+        type: 'string'
