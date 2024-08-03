@@ -1,4 +1,5 @@
 addr: 'localhost:1337'
+
 field_sets:
   - id: 'users'
     fields:

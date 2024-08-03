@@ -55,7 +55,7 @@ func NewService(fieldSets []*FieldSet) (string, http.Handler) {
 	})
 }
 
-// StringToType converts a string representation of a type to its corresponding exprpb.Type.
+// stringToType converts a string representation of a type to its corresponding exprpb.Type.
 func stringToType(s string) (*exprpb.Type, error) {
 	switch s {
 	case "bool":
@@ -125,8 +125,19 @@ func (s *Service) Filter(ctx context.Context, req *connect.Request[filtererpb.Fi
 		return nil, fmt.Errorf("filterer: %w", err)
 	}
 
+	// Convert args to strings.
+	var sargs []string
+	for _, arg := range args {
+		strArg, ok := arg.(string)
+		if !ok {
+			return nil, fmt.Errorf("failed to convert arg to string: %v", arg)
+		}
+		sargs = append(sargs, strArg)
+	}
+
 	// Return response.
 	return connect.NewResponse(&filtererpb.FilterResponse{
-		Where: fmt.Sprintf("WHERE: %s, ARGS: %v", clause, args),
+		Where: clause,
+		Args:  sargs,
 	}), nil
 }

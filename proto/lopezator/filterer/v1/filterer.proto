@@ -17,4 +17,5 @@ message FilterRequest {
 // The response message containing the sql to issue the filtering, based on the filter request.
 message FilterResponse {
   string where = 1;
+  repeated string args = 2;
 }
