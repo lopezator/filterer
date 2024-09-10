@@ -119,7 +119,20 @@ func (s *Service) Filter(ctx context.Context, req *connect.Request[filtererpb.Fi
 		return nil, fmt.Errorf("filterer: %w", err)
 	}
 
-	// Generate SQL clause.
+	// TODO(d.lopez): The current idea, pending to add baseQuery and baseArgs to the request.
+	// Having a base query with placeholders ?, example:
+	// clause: SELECT * FROM table WHERE column = ? ORDER BY id
+	// args: paco
+	// Maybe just a string query? I don't know yet.
+	// sql: select * from table where column = 'paco' order by id
+	// I should be able to append a where to that original query, example:
+	// clause: "display_name=? AND age=?"
+	// args: david, 30
+	// And get the final query, like this:
+	// SELECT * FROM table WHERE column = 'paco' AND display_name='david' AND age=30 ORDER BY id
+	// Maybe modify the response to return just the final string?
+
+	// Generate WHERE clause along with the args from the filter string expression.
 	clause, args, err := expr.SQL(filter)
 	if err != nil {
 		return nil, fmt.Errorf("filterer: %w", err)
