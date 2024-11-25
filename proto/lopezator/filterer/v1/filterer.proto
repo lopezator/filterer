@@ -10,12 +10,13 @@ service FiltererService {
 
 // The request message containing the table and the filter string.
 message FilterRequest {
+  // The base query you want to use for your filtering operation.
+  string base_query = 1;
   // The filter expression.
-  string expr = 1;
+  string expr = 2;
 }
 
-// The response message containing the sql to issue the filtering, based on the filter request.
+// The response message containing the sql to issue the filtering, based on the base query and the filter request.
 message FilterResponse {
-  string where = 1;
-  repeated string args = 2;
+  string query = 1;
 }

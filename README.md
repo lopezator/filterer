@@ -24,7 +24,7 @@ http://localhost:1337/lopezator.filterer.v1.FiltererService/Filter --http2-prior
 
 ```bash
 curl --header "Content-Type: application/json" \
---data '{"expr": "display_name == '\'paco\''"}' \ 
+--data '{"expr": "display_name == '\''paco'\''"}' \
 http://localhost:1337/lopezator.filterer.v1.FiltererService/Filter
 ```
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"buf.build/gen/go/lopezator/filterer/connectrpc/go/lopezator/filterer/v1/filtererv1connect"
 	filtererpb "buf.build/gen/go/lopezator/filterer/protocolbuffers/go/lopezator/filterer/v1"
@@ -115,7 +116,7 @@ func stringToType(s string) (*exprpb.Type, error) {
 
 // Filter implements filterer.FiltererServiceServer.Filter.
 func (s *Service) Filter(ctx context.Context, req *connect.Request[filtererpb.FilterRequest]) (*connect.Response[filtererpb.FilterResponse], error) {
-	baseQuery := "SELECT * FROM table WHERE name = 'paco' AND surname = 'luis' ORDER BY id LIMIT 10"
+	baseQuery := "SELECT * FROM users WHERE id = 3 ORDER BY id LIMIT 10"
 
 	// Create a new parser instance
 	parser, err := sqlparser.New(sqlparser.Options{})
@@ -147,14 +148,19 @@ func (s *Service) Filter(ctx context.Context, req *connect.Request[filtererpb.Fi
 		return nil, fmt.Errorf("filterer: %w", err)
 	}
 
-	// Format the clause with the args
-	formattedClause := fmt.Sprintf(clause, args...)
-
-	whereExpr, err := parser.ParseExpr(formattedClause)
-	if err != nil {
-		log.Fatalf("failed to parse additional WHERE clause: %v", err)
+	// Replace placeholders with actual arguments
+	var formattedClause string
+	for _, arg := range args {
+		formattedClause = strings.Replace(clause, "?", fmt.Sprintf("'%v'", arg), 1)
 	}
 
+	// Parse the additional WHERE clause
+	whereExpr, err := parser.ParseExpr(formattedClause)
+	if err != nil {
+		return nil, fmt.Errorf("filterer: failed to parse additional WHERE clause: %w", err)
+	}
+
+	// Append the additional WHERE clause to the base query
 	if selectStmt.Where == nil {
 		selectStmt.Where = &sqlparser.Where{
 			Type: sqlparser.WhereClause,
@@ -167,32 +173,8 @@ func (s *Service) Filter(ctx context.Context, req *connect.Request[filtererpb.Fi
 		}
 	}
 
-	// TODO(d.lopez): The current idea, pending to add baseQuery and baseArgs to the request.
-	// Having a base query with placeholders ?, example:
-	// clause: SELECT * FROM table WHERE column = ? ORDER BY id
-	// args: paco
-	// Maybe just a string query? I don't know yet.
-	// sql: select * from table where column = 'paco' order by id
-	// I should be able to append a where to that original query, example:
-	// clause: "display_name=? AND age=?"
-	// args: david, 30
-	// And get the final query, like this:
-	// SELECT * FROM table WHERE column = 'paco' AND display_name='david' AND age=30 ORDER BY id
-	// Maybe modify the response to return just the final string?
-
-	// Convert args to strings.
-	var sargs []string
-	for _, arg := range args {
-		strArg, ok := arg.(string)
-		if !ok {
-			return nil, fmt.Errorf("failed to convert arg to string: %v", arg)
-		}
-		sargs = append(sargs, strArg)
-	}
-
 	// Return response.
 	return connect.NewResponse(&filtererpb.FilterResponse{
-		Where: clause,
-		Args:  sargs,
+		Query: sqlparser.String(selectStmt),
 	}), nil
 }
